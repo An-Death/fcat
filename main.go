@@ -5,22 +5,27 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 	"sync"
+	"time"
 )
 
 var (
-	workers     = flag.Int("workers", 1, "Amount of workers to process the files")
-	addr        = flag.String("addr", "localhost:8888", "UDP Address to send data")
-	pathToFiles string
-	fileChan    chan string
-	workerPool  []*worker
-	group       sync.WaitGroup
-	workedFiles int
-	totalFiles  int
+	workers      = flag.Int("workers", 1, "Amount of workers to process the files")
+	addr         = flag.String("addr", "localhost:8888", "UDP Address to send data")
+	pathToFiles  string
+	fileChan     chan string
+	workerPool   []*worker
+	group        sync.WaitGroup
+	workedFiles  int
+	totalFiles   int
+	droppedLines int
+	totalLines   int
 )
 
 func main() {
+	start := time.Now()
 	flag.Parse()
 	fileChan = make(chan string, *workers)
 
@@ -38,11 +43,11 @@ func main() {
 		workedFiles++
 		fmt.Printf("%v/%v of total\t\r", workedFiles, totalFiles)
 	})
-
+	fmt.Println("\nWait workers...")
 	close(fileChan)
 	group.Wait()
-	fmt.Println("All files done")
-
+	fmt.Printf("All files done! Time: %s,  Total lines: %v, Dropped: %v", time.Since(start), totalLines, droppedLines)
+	os.Exit(0)
 }
 
 func startWorkers() {

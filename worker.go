@@ -36,7 +36,12 @@ func (w *worker) WorkOnce(file string) {
 	}
 	for scan.Scan() {
 		line := append(scan.Bytes(), '\n')
-		w.con.Write(line)
+		if _, err := w.con.Write(line); err != nil {
+			droppedLines++
+		} else {
+			totalLines++
+		}
+
 	}
 }
 
