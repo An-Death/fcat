@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
@@ -17,8 +16,7 @@ const gz = ".gz"
 type worker struct {
 	writer   io.WriteCloser
 	closable []io.Closer
-	limit    float64
-	sync.WaitGroup
+	timeout  time.Duration
 }
 
 func (w *worker) Work(fileChan chan string) {
@@ -29,31 +27,33 @@ func (w *worker) Work(fileChan chan string) {
 }
 
 func (w *worker) WorkOnce(file string) {
-	w.Add(1)
-	defer w.Done()
 	scan, err := w.readFile(file)
 	if err != nil {
 		log.Printf("Worker : %s\n", err)
 		return
 	}
-	if w.limit == 0 {
-		w.goNoLimit(scan)
+
+	if w.timeout == 0 {
+		w.noTimeout(scan)
 	} else {
-		w.goWithLimit(scan, int64(time.Second)/int64(w.limit*1000))
+		w.withTimeout(scan, w.timeout)
 	}
 }
-func (w *worker) goNoLimit(scanner *bufio.Scanner) {
+
+func (w *worker) noTimeout(scanner *bufio.Scanner) {
 	for scanner.Scan() {
 		w.sendLine(scanner.Bytes())
 	}
 }
-func (w *worker) goWithLimit(scanner *bufio.Scanner, limit int64) {
-	throttle := time.Tick(time.Duration(limit))
+
+func (w *worker) withTimeout(scanner *bufio.Scanner, timeout time.Duration) {
+	t := time.Tick(timeout)
 	for scanner.Scan() {
-		<-throttle
 		w.sendLine(scanner.Bytes())
+		<-t
 	}
 }
+
 func (w *worker) sendLine(data []byte) {
 	if _, err := w.writer.Write(append(data, '\n')); err == nil {
 		totalLines++
