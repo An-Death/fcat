@@ -4,53 +4,25 @@ import (
 	"bufio"
 	"compress/gzip"
 	"io"
-	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 )
 
-const gz = ".gz"
-
 type worker struct {
-	writer   io.WriteCloser
-	closable []io.Closer
-	timeout  time.Duration
+	writer  io.WriteCloser
+	timeout time.Duration
 }
 
-func (w *worker) Work(fileChan chan string) {
-	for file := range fileChan {
-		w.WorkOnce(file)
-	}
-	w.Close()
-}
-
-func (w *worker) WorkOnce(file string) {
-	scan, err := w.readFile(file)
-	if err != nil {
-		log.Printf("Worker : %s\n", err)
-		return
-	}
-
-	if w.timeout == 0 {
-		w.noTimeout(scan)
+func (w *worker) Work(scenario records) {
+	if w.timeout > 0 {
+		for m := range withTimeout(cycle(scenario), w.timeout) {
+			w.sendLine(m)
+		}
 	} else {
-		w.withTimeout(scan, w.timeout)
-	}
-}
-
-func (w *worker) noTimeout(scanner *bufio.Scanner) {
-	for scanner.Scan() {
-		w.sendLine(scanner.Bytes())
-	}
-}
-
-func (w *worker) withTimeout(scanner *bufio.Scanner, timeout time.Duration) {
-	t := time.Tick(timeout)
-	for scanner.Scan() {
-		w.sendLine(scanner.Bytes())
-		<-t
+		for m := range cycle(scenario) {
+			w.sendLine(m)
+		}
 	}
 }
 
@@ -64,31 +36,6 @@ func (w *worker) sendLine(data []byte) {
 
 func (w *worker) Close() {
 	w.writer.Close()
-	for _, cl := range w.closable {
-		cl.Close()
-	}
-}
-
-func (w *worker) readFile(name string) (*bufio.Scanner, error) {
-	file, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	w.appendClosable(file)
-
-	if filepath.Ext(name) == gz {
-		gz, err := gzip.NewReader(file)
-		if err != nil {
-			return nil, err
-		}
-		w.appendClosable(gz)
-		return bufio.NewScanner(gz), nil
-	}
-	return bufio.NewScanner(file), nil
-}
-
-func (w *worker) appendClosable(cl io.Closer) {
-	w.closable = append(w.closable, cl)
 }
 
 func getUDPConnection(addr string) (net.Conn, error) {
@@ -125,4 +72,29 @@ func getGzFile(path string) (f *F, err error) {
 	fw := bufio.NewWriter(gf)
 	f = &F{fi, gf, fw}
 	return f, nil
+}
+
+func cycle(d [][]byte) <-chan []byte {
+	c := make(chan []byte, len(d)*100)
+	go func() {
+		for {
+			for _, m := range d {
+				c <- m
+			}
+		}
+	}()
+	return c
+}
+
+func withTimeout(cc <-chan []byte, timeout time.Duration) <-chan []byte {
+	c := make(chan []byte, len(cc))
+	go func() {
+		t := time.Tick(timeout)
+		for m := range cc {
+			c <- m
+			<-t
+		}
+	}()
+
+	return c
 }
