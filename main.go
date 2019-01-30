@@ -22,7 +22,7 @@ var (
 	scenarioFile string
 	scenario     records
 	droppedLines int
-	totalLines   int
+	sendLines    int
 	globalStart  time.Time
 	globalEnd    time.Duration
 	done         = make(chan bool)
@@ -41,6 +41,7 @@ func main() {
 	}
 
 	scenario = readScenarioFromFile(scenarioFile)
+	fmt.Printf("Scenario lines: %v\n", len(scenario))
 	w := startWorker()
 	go func() {
 		w.Work(scenario)
@@ -55,8 +56,8 @@ func main() {
 	globalEnd = time.Since(globalStart)
 	w.Close()
 
-	fmt.Printf("Time: %s,  Total messages: %v, Dropped: %v\n", globalEnd, totalLines, droppedLines)
-	fmt.Printf("Message per sec: %v\n", float64(totalLines)/globalEnd.Seconds())
+	fmt.Printf("Time: %s,  Total messages: %v, Dropped: %v\n", globalEnd, sendLines, droppedLines)
+	fmt.Printf("Message per sec: %v\n", float64(sendLines)/globalEnd.Seconds())
 	os.Exit(0)
 }
 
@@ -77,18 +78,16 @@ func startWorker() *worker {
 	return &worker{writer: writer, timeout: *timeout}
 }
 
-func readScenarioFromFile(f string) [][]byte {
+func readScenarioFromFile(f string) (buf [][]byte) {
 	fd, err := os.OpenFile(f, os.O_RDONLY, 0660)
 	if err != nil {
 		log.Fatalf("Error open scenario file")
 	}
 	defer fd.Close()
-	buf := make([][]byte, 1024)
 
 	scanner := bufio.NewScanner(fd)
 	for scanner.Scan() {
 		buf = append(buf, scanner.Bytes())
 	}
 	return buf
-
 }

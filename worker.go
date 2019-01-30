@@ -28,7 +28,7 @@ func (w *worker) Work(scenario records) {
 
 func (w *worker) sendLine(data []byte) {
 	if _, err := w.writer.Write(append(data, '\n')); err == nil {
-		totalLines++
+		sendLines++
 	} else {
 		droppedLines++
 	}
